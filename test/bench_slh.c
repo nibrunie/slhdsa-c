@@ -22,6 +22,22 @@ static inline uint64_t cpucycles(void) {
   __asm__ volatile("mrs %0, cntvct_el0" : "=r"(t));
   return t;
 }
+#elif defined(__riscv)
+static inline uint64_t cpucycles(void) {
+#if __riscv_xlen == 32
+  uint32_t hi, lo, hi2;
+  do {
+    __asm__ volatile("csrr %0, cycleh" : "=r"(hi));
+    __asm__ volatile("csrr %0, cycle" : "=r"(lo));
+    __asm__ volatile("csrr %0, cycleh" : "=r"(hi2));
+  } while (hi != hi2);
+  return ((uint64_t)hi << 32) | lo;
+#else
+  uint64_t cycle;
+  __asm__ volatile("csrr %0, cycle" : "=r"(cycle));
+  return cycle;
+#endif
+}
 #else
 static inline uint64_t cpucycles(void) {
 #if defined(__GNUC__) || defined(__clang__)
