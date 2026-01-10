@@ -13,6 +13,55 @@
 
 /* --- Cycle counter (cpucycles) --- */
 
+#ifdef PERF_CYCLES
+#include <linux/perf_event.h>
+#include <sys/ioctl.h> /* for ioctl in clean shutdown if desired, though not strictly needed for just reading */
+#include <sys/syscall.h>
+#include <unistd.h>
+
+static int fd_perf = -1;
+
+static long perf_event_open(struct perf_event_attr *hw_event, pid_t pid,
+                            int cpu, int group_fd, unsigned long flags) {
+  return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
+}
+
+static void __attribute__((constructor)) init_perf(void) {
+  struct perf_event_attr pe;
+
+  memset(&pe, 0, sizeof(struct perf_event_attr));
+  pe.type = PERF_TYPE_HARDWARE;
+  pe.size = sizeof(struct perf_event_attr);
+  pe.config = PERF_COUNT_HW_CPU_CYCLES;
+  pe.disabled = 1;
+  pe.exclude_kernel = 1;
+  pe.exclude_hv = 1;
+
+  fd_perf = perf_event_open(&pe, 0, -1, -1, 0);
+  if (fd_perf == -1) {
+    perror("perf_event_open");
+    exit(EXIT_FAILURE);
+  }
+  ioctl(fd_perf, PERF_EVENT_IOC_RESET, 0);
+  ioctl(fd_perf, PERF_EVENT_IOC_ENABLE, 0);
+}
+
+static void __attribute__((destructor)) fini_perf(void) {
+  if (fd_perf != -1) {
+    close(fd_perf);
+  }
+}
+
+static inline uint64_t cpucycles(void) {
+  uint64_t count;
+  if (read(fd_perf, &count, sizeof(uint64_t)) == -1) {
+    return 0;
+  }
+  return count;
+}
+
+#else /* !PERF_CYCLES */
+
 #if defined(__x86_64__)
 #include <x86intrin.h>
 static inline uint64_t cpucycles(void) { return __rdtsc(); }
@@ -47,6 +96,8 @@ static inline uint64_t cpucycles(void) {
 #endif
 }
 #endif
+
+#endif /* PERF_CYCLES */
 
 /* --- Benchmark Parameters --- */
 
