@@ -38,6 +38,11 @@ $(XTEST):	$(OBJS)
 test: $(XTEST)
 	python3 test/acvp_client.py
 
+
 clean:
-	$(RM) -rf $(XTEST) $(OBJS) *.rsp *.req *.log
+	$(RM) -rf $(XTEST) $(OBJS) *.rsp *.req *.log bench_slh
 	cd test && $(MAKE) clean
+
+bench: $(OBJS)
+	$(CC) $(LDFLAGS) $(CFLAGS) -o bench_slh $(OBJS) test/bench_slh.c $(LDLIBS)
+	./bench_slh
