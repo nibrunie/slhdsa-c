@@ -139,8 +139,9 @@ static void bench_param(const slh_param_t *prm) {
 #endif
   }
 #ifdef SLH_EXPERIMENTAL
-  printf("  KeyGen: %llu cycles (%.0f%% Keccak)\n",
+  printf("  KeyGen: %llu cycles (%llu or %.0f%% Keccak)\n",
          (unsigned long long)median(t, NITER),
+	 (unsigned long long)median(k, NITER),
          100.0 * (double)median(k, NITER) / (double)median(t, NITER));
 #else
   printf("  KeyGen: %llu cycles\n", (unsigned long long)median(t, NITER));
@@ -165,8 +166,9 @@ static void bench_param(const slh_param_t *prm) {
 #endif
   }
 #ifdef SLH_EXPERIMENTAL
-  printf("  Sign:   %llu cycles (%.0f%% Keccak)\n",
+  printf("  Sign:   %llu cycles (%llu or %.0f%% Keccak)\n",
          (unsigned long long)median(t, NITER),
+	 (unsigned long long)median(k, NITER),
          100.0 * (double)median(k, NITER) / (double)median(t, NITER));
 #else
   printf("  Sign:   %llu cycles\n", (unsigned long long)median(t, NITER));
@@ -198,8 +200,9 @@ static void bench_param(const slh_param_t *prm) {
 #endif
     }
 #ifdef SLH_EXPERIMENTAL
-    printf("  Verify: %llu cycles (%.0f%% Keccak)\n",
+    printf("  Verify: %llu cycles (%llu or %.0f%% Keccak)\n",
            (unsigned long long)median(t, NITER),
+	 (unsigned long long)median(k, NITER),
            100.0 * (double)median(k, NITER) / (double)median(t, NITER));
 #else
     printf("  Verify: %llu cycles\n", (unsigned long long)median(t, NITER));
