@@ -3,6 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT
  */
 
+#if defined(__linux__)
+#if !defined(_GNU_SOURCE)
+/* Ensure that syscall() is declared even when compiling with -std=c99 */
+#define _GNU_SOURCE
+#endif
+#endif /* __linux__ */
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
