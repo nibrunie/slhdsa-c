@@ -2,6 +2,12 @@
  * Copyright (c) 2024 The slhdsa-c project authors
  * SPDX-License-Identifier: Apache-2.0 OR ISC OR MIT
  */
+#if defined(__linux__)
+#if !defined(_GNU_SOURCE)
+/* Ensure that syscall() is declared even when compiling with -std=c99 */
+#define _GNU_SOURCE
+#endif
+#endif /* __linux__ */
 
 #include <stdint.h>
 #include <stdio.h>
@@ -14,21 +20,25 @@
 /* --- Cycle counter (cpucycles) --- */
 
 #ifdef PERF_CYCLES
+
+
+#include <asm/unistd.h>
 #include <linux/perf_event.h>
-#include <sys/ioctl.h> /* for ioctl in clean shutdown if desired, though not strictly needed for just reading */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
-static int fd_perf = -1;
+void enable_cyclecounter(void);
+void disable_cyclecounter(void);
+uint64_t get_cyclecounter(void);
 
-static long perf_event_open(struct perf_event_attr *hw_event, pid_t pid,
-                            int cpu, int group_fd, unsigned long flags) {
-  return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
-}
-
-static void __attribute__((constructor)) init_perf(void) {
+static int perf_fd = -1;
+void enable_cyclecounter(void)
+{
   struct perf_event_attr pe;
-
   memset(&pe, 0, sizeof(struct perf_event_attr));
   pe.type = PERF_TYPE_HARDWARE;
   pe.size = sizeof(struct perf_event_attr);
@@ -37,27 +47,51 @@ static void __attribute__((constructor)) init_perf(void) {
   pe.exclude_kernel = 1;
   pe.exclude_hv = 1;
 
-  fd_perf = perf_event_open(&pe, 0, -1, -1, 0);
-  if (fd_perf == -1) {
-    perror("perf_event_open");
+  perf_fd = (int)syscall(__NR_perf_event_open, &pe, 0, -1, -1, 0);
+
+  ioctl(perf_fd, PERF_EVENT_IOC_RESET, 0);
+  ioctl(perf_fd, PERF_EVENT_IOC_ENABLE, 0);
+}
+
+void disable_cyclecounter(void)
+{
+  ioctl(perf_fd, PERF_EVENT_IOC_DISABLE, 0);
+  close(perf_fd);
+}
+
+uint64_t get_cyclecounter(void)
+{
+  long long cpu_cycles;
+  ioctl(perf_fd, PERF_EVENT_IOC_DISABLE, 0);
+  ssize_t read_count = read(perf_fd, &cpu_cycles, sizeof(cpu_cycles));
+  if (read_count < 0)
+  {
+    perror("read");
     exit(EXIT_FAILURE);
   }
-  ioctl(fd_perf, PERF_EVENT_IOC_RESET, 0);
-  ioctl(fd_perf, PERF_EVENT_IOC_ENABLE, 0);
+  else if (read_count == 0)
+  {
+    /* Should not happen */
+    printf("perf counter empty\n");
+    exit(EXIT_FAILURE);
+  }
+  ioctl(perf_fd, PERF_EVENT_IOC_ENABLE, 0);
+  return (uint64_t)cpu_cycles;
+}
+
+
+static void __attribute__((constructor)) init_perf(void) {
+	enable_cyclecounter();
 }
 
 static void __attribute__((destructor)) fini_perf(void) {
-  if (fd_perf != -1) {
-    close(fd_perf);
+  if (perf_fd != -1) {
+	disable_cyclecounter();
   }
 }
 
 static inline uint64_t cpucycles(void) {
-  uint64_t count;
-  if (read(fd_perf, &count, sizeof(uint64_t)) == -1) {
-    return 0;
-  }
-  return count;
+	return get_cyclecounter();
 }
 
 #else /* !PERF_CYCLES */
