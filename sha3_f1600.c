@@ -8,14 +8,21 @@
 #include "plat_local.h"
 #include "sha3_api.h"
 
+#ifdef PERF_CYCLES
+int slh_perf_fd = -1;
+#endif
+
 #ifdef SLH_EXPERIMENTAL
 uint64_t keccak_f1600_count = 0; /* instrumentation */
+uint64_t keccak_f1600_cycles = 0;
 #endif
 
 /* forward permutation */
 
-void keccak_f1600(uint64_t x[25])
-{
+void keccak_f1600(uint64_t x[25]) {
+#ifdef SLH_EXPERIMENTAL
+  uint64_t start_cycles = slh_get_cycles();
+#endif
   /* round constants */
   static const uint64_t keccak_rc[24] = {
       UINT64_C(0x0000000000000001), UINT64_C(0x0000000000008082),
@@ -40,8 +47,7 @@ void keccak_f1600(uint64_t x[25])
 
   /* iteration */
 
-  for (i = 0; i < 24; i++)
-  {
+  for (i = 0; i < 24; i++) {
     /* Theta */
 
     y4 = x[4] ^ x[9] ^ x[14] ^ x[19] ^ x[24];
@@ -152,4 +158,7 @@ void keccak_f1600(uint64_t x[25])
 
     x[0] = x[0] ^ keccak_rc[i];
   }
+#ifdef SLH_EXPERIMENTAL
+  keccak_f1600_cycles += slh_get_cycles() - start_cycles;
+#endif
 }

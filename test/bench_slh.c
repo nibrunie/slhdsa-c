@@ -9,17 +9,17 @@
 #include <string.h>
 #include <time.h>
 
+#include "../plat_local.h"
 #include "../slh_dsa.h"
 
-/* --- Cycle counter (cpucycles) --- */
+#ifdef SLH_EXPERIMENTAL
+extern uint64_t keccak_f1600_cycles;
+#endif
+
+/* --- Cycle counter (slh_get_cycles) --- */
 
 #ifdef PERF_CYCLES
-#include <linux/perf_event.h>
-#include <sys/ioctl.h> /* for ioctl in clean shutdown if desired, though not strictly needed for just reading */
-#include <sys/syscall.h>
-#include <unistd.h>
-
-static int fd_perf = -1;
+/* slh_perf_fd is declared in plat_local.h */
 
 static long perf_event_open(struct perf_event_attr *hw_event, pid_t pid,
                             int cpu, int group_fd, unsigned long flags) {
@@ -37,66 +37,25 @@ static void __attribute__((constructor)) init_perf(void) {
   pe.exclude_kernel = 1;
   pe.exclude_hv = 1;
 
-  fd_perf = perf_event_open(&pe, 0, -1, -1, 0);
-  if (fd_perf == -1) {
+  slh_perf_fd = perf_event_open(&pe, 0, -1, -1, 0);
+  if (slh_perf_fd == -1) {
     perror("perf_event_open");
     exit(EXIT_FAILURE);
   }
-  ioctl(fd_perf, PERF_EVENT_IOC_RESET, 0);
-  ioctl(fd_perf, PERF_EVENT_IOC_ENABLE, 0);
+  ioctl(slh_perf_fd, PERF_EVENT_IOC_RESET, 0);
+  ioctl(slh_perf_fd, PERF_EVENT_IOC_ENABLE, 0);
 }
 
 static void __attribute__((destructor)) fini_perf(void) {
-  if (fd_perf != -1) {
-    close(fd_perf);
+  if (slh_perf_fd != -1) {
+    close(slh_perf_fd);
   }
 }
 
-static inline uint64_t cpucycles(void) {
-  uint64_t count;
-  if (read(fd_perf, &count, sizeof(uint64_t)) == -1) {
-    return 0;
-  }
-  return count;
-}
+/* slh_get_cycles() is in plat_local.h */
 
-#else /* !PERF_CYCLES */
-
-#if defined(__x86_64__)
-#include <x86intrin.h>
-static inline uint64_t cpucycles(void) { return __rdtsc(); }
-#elif defined(__aarch64__)
-static inline uint64_t cpucycles(void) {
-  uint64_t t;
-  __asm__ volatile("mrs %0, cntvct_el0" : "=r"(t));
-  return t;
-}
-#elif defined(__riscv)
-static inline uint64_t cpucycles(void) {
-#if __riscv_xlen == 32
-  uint32_t hi, lo, hi2;
-  do {
-    __asm__ volatile("csrr %0, cycleh" : "=r"(hi));
-    __asm__ volatile("csrr %0, cycle" : "=r"(lo));
-    __asm__ volatile("csrr %0, cycleh" : "=r"(hi2));
-  } while (hi != hi2);
-  return ((uint64_t)hi << 32) | lo;
-#else
-  uint64_t cycle;
-  __asm__ volatile("csrr %0, cycle" : "=r"(cycle));
-  return cycle;
-#endif
-}
-#else
-static inline uint64_t cpucycles(void) {
-#if defined(__GNUC__) || defined(__clang__)
-  return (uint64_t)clock();
-#else
-  return 0;
-#endif
-}
-#endif
-
+#else  /* !PERF_CYCLES */
+/* slh_get_cycles() is in plat_local.h */
 #endif /* PERF_CYCLES */
 
 /* --- Benchmark Parameters --- */
@@ -135,6 +94,9 @@ static void bench_param(const slh_param_t *prm) {
   uint8_t *sk, *pk, *m, *sig;
   size_t sk_sz, pk_sz, sig_sz, m_sz = 32;
   uint64_t t[NITER];
+#ifdef SLH_EXPERIMENTAL
+  uint64_t k[NITER];
+#endif
   uint64_t t0, t1;
   size_t i;
 
@@ -158,12 +120,24 @@ static void bench_param(const slh_param_t *prm) {
   }
   /* Measure */
   for (i = 0; i < NITER; i++) {
-    t0 = cpucycles();
+#ifdef SLH_EXPERIMENTAL
+    keccak_f1600_cycles = 0;
+#endif
+    t0 = slh_get_cycles();
     slh_keygen(sk, pk, rbg, prm);
-    t1 = cpucycles();
+    t1 = slh_get_cycles();
     t[i] = t1 - t0;
+#ifdef SLH_EXPERIMENTAL
+    k[i] = keccak_f1600_cycles;
+#endif
   }
+#ifdef SLH_EXPERIMENTAL
+  printf("  KeyGen: %llu cycles (%.0f%% Keccak)\n",
+         (unsigned long long)median(t, NITER),
+         100.0 * (double)median(k, NITER) / (double)median(t, NITER));
+#else
   printf("  KeyGen: %llu cycles\n", (unsigned long long)median(t, NITER));
+#endif
 
   /* --- Signature Gen --- */
   /* Warmup */
@@ -172,12 +146,24 @@ static void bench_param(const slh_param_t *prm) {
   }
   /* Measure */
   for (i = 0; i < NITER; i++) {
-    t0 = cpucycles();
+#ifdef SLH_EXPERIMENTAL
+    keccak_f1600_cycles = 0;
+#endif
+    t0 = slh_get_cycles();
     slh_sign(sig, m, m_sz, NULL, 0, sk, NULL, prm);
-    t1 = cpucycles();
+    t1 = slh_get_cycles();
     t[i] = t1 - t0;
+#ifdef SLH_EXPERIMENTAL
+    k[i] = keccak_f1600_cycles;
+#endif
   }
+#ifdef SLH_EXPERIMENTAL
+  printf("  Sign:   %llu cycles (%.0f%% Keccak)\n",
+         (unsigned long long)median(t, NITER),
+         100.0 * (double)median(k, NITER) / (double)median(t, NITER));
+#else
   printf("  Sign:   %llu cycles\n", (unsigned long long)median(t, NITER));
+#endif
 
   /* --- Verification --- */
   /* Check correctness first */
@@ -189,15 +175,28 @@ static void bench_param(const slh_param_t *prm) {
       slh_verify(m, m_sz, sig, sig_sz, NULL, 0, pk, prm);
     }
     /* Measure */
+    /* Measure */
     for (i = 0; i < NITER; i++) {
-      t0 = cpucycles();
+#ifdef SLH_EXPERIMENTAL
+      keccak_f1600_cycles = 0;
+#endif
+      t0 = slh_get_cycles();
       if (!slh_verify(m, m_sz, sig, sig_sz, NULL, 0, pk, prm)) {
         printf("Freq fail!\n");
       }
-      t1 = cpucycles();
+      t1 = slh_get_cycles();
       t[i] = t1 - t0;
+#ifdef SLH_EXPERIMENTAL
+      k[i] = keccak_f1600_cycles;
+#endif
     }
+#ifdef SLH_EXPERIMENTAL
+    printf("  Verify: %llu cycles (%.0f%% Keccak)\n",
+           (unsigned long long)median(t, NITER),
+           100.0 * (double)median(k, NITER) / (double)median(t, NITER));
+#else
     printf("  Verify: %llu cycles\n", (unsigned long long)median(t, NITER));
+#endif
   }
 
   printf("\n");
