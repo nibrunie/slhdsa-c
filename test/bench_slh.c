@@ -21,6 +21,7 @@
 
 #ifdef SLH_EXPERIMENTAL
 extern uint64_t keccak_f1600_cycles;
+extern uint64_t keccak_f1600_count;
 #endif
 
 /* --- Cycle counter (slh_get_cycles) --- */
@@ -128,20 +129,22 @@ static void bench_param(const slh_param_t *prm) {
   /* Measure */
   for (i = 0; i < NITER; i++) {
 #ifdef SLH_EXPERIMENTAL
-    keccak_f1600_cycles = 0;
+    // keccak_f1600_cycles = 0;
+    keccak_f1600_count = 0;
 #endif
     t0 = slh_get_cycles();
     slh_keygen(sk, pk, rbg, prm);
     t1 = slh_get_cycles();
     t[i] = t1 - t0;
 #ifdef SLH_EXPERIMENTAL
-    k[i] = keccak_f1600_cycles;
+    // k[i] = keccak_f1600_cycles;
+    k[i] = keccak_f1600_count;
 #endif
   }
 #ifdef SLH_EXPERIMENTAL
   printf("  KeyGen: %llu cycles (%llu or %.0f%% Keccak)\n",
          (unsigned long long)median(t, NITER),
-	 (unsigned long long)median(k, NITER),
+         (unsigned long long)median(k, NITER),
          100.0 * (double)median(k, NITER) / (double)median(t, NITER));
 #else
   printf("  KeyGen: %llu cycles\n", (unsigned long long)median(t, NITER));
@@ -155,20 +158,22 @@ static void bench_param(const slh_param_t *prm) {
   /* Measure */
   for (i = 0; i < NITER; i++) {
 #ifdef SLH_EXPERIMENTAL
-    keccak_f1600_cycles = 0;
+    // keccak_f1600_cycles = 0;
+    keccak_f1600_count = 0;
 #endif
     t0 = slh_get_cycles();
     slh_sign(sig, m, m_sz, NULL, 0, sk, NULL, prm);
     t1 = slh_get_cycles();
     t[i] = t1 - t0;
 #ifdef SLH_EXPERIMENTAL
-    k[i] = keccak_f1600_cycles;
+    // k[i] = keccak_f1600_cycles;
+    k[i] = keccak_f1600_count;
 #endif
   }
 #ifdef SLH_EXPERIMENTAL
   printf("  Sign:   %llu cycles (%llu or %.0f%% Keccak)\n",
          (unsigned long long)median(t, NITER),
-	 (unsigned long long)median(k, NITER),
+         (unsigned long long)median(k, NITER),
          100.0 * (double)median(k, NITER) / (double)median(t, NITER));
 #else
   printf("  Sign:   %llu cycles\n", (unsigned long long)median(t, NITER));
@@ -187,7 +192,8 @@ static void bench_param(const slh_param_t *prm) {
     /* Measure */
     for (i = 0; i < NITER; i++) {
 #ifdef SLH_EXPERIMENTAL
-      keccak_f1600_cycles = 0;
+      // keccak_f1600_cycles = 0;
+      keccak_f1600_count = 0;
 #endif
       t0 = slh_get_cycles();
       if (!slh_verify(m, m_sz, sig, sig_sz, NULL, 0, pk, prm)) {
@@ -196,13 +202,14 @@ static void bench_param(const slh_param_t *prm) {
       t1 = slh_get_cycles();
       t[i] = t1 - t0;
 #ifdef SLH_EXPERIMENTAL
-      k[i] = keccak_f1600_cycles;
+      // k[i] = keccak_f1600_cycles;
+      k[i] = keccak_f1600_count;
 #endif
     }
 #ifdef SLH_EXPERIMENTAL
     printf("  Verify: %llu cycles (%llu or %.0f%% Keccak)\n",
            (unsigned long long)median(t, NITER),
-	 (unsigned long long)median(k, NITER),
+           (unsigned long long)median(k, NITER),
            100.0 * (double)median(k, NITER) / (double)median(t, NITER));
 #else
     printf("  Verify: %llu cycles\n", (unsigned long long)median(t, NITER));
